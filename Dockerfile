@@ -22,4 +22,4 @@ RUN     apk add -U --no-cache mtr
 COPY    --from=build-env /src/mtr-exporter/$MTR_BIN /usr/local/bin/mtr-exporter
 
 EXPOSE  8080
-ENTRYPOINT ["/usr/local/bin/mtr-exporter"]
+ENTRYPOINT ["/usr/local/bin/mtr-exporter", "8.8.8.8"]
