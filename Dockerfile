@@ -13,6 +13,7 @@ ARG     TARGETARCH
 ARG     VERSION=latest
 
 ADD     . /src/mtr-exporter
+WORKDIR /src/mtr-exporter
 RUN     apk add -U --no-cache make git
 RUN     make -C /src/mtr-exporter bin/mtr-exporter-$VERSION.$TARGETOS.$TARGETARCH
 
