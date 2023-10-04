@@ -1,4 +1,4 @@
-module github.com/mgumz/mtr-exporter
+module github.com/twodarek/mtr-exporter
 
 go 1.21
 
