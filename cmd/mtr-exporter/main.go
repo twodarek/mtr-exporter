@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/mgumz/mtr-exporter/pkg/job"
+	"github.com/twodarek/mtr-exporter/pkg/job"
 
 	"github.com/robfig/cron/v3"
 )
@@ -22,7 +22,7 @@ func main() {
 	mtef := newFlags()
 	flag.Usage = usage
 	flag.Parse()
-	
+
 	if mtef.doPrintVersion {
 		printVersion()
 		return

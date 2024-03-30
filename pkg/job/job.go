@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mgumz/mtr-exporter/pkg/mtr"
+	"github.com/twodarek/mtr-exporter/pkg/mtr"
 )
 
 type JobMeta struct {
