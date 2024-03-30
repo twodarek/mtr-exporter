@@ -22,7 +22,7 @@ func main() {
 	mtef := newFlags()
 	flag.Usage = usage
 	flag.Parse()
-
+	
 	if mtef.doPrintVersion {
 		printVersion()
 		return
