@@ -1,40 +1,50 @@
-package main
+package job
 
 import (
 	"bytes"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/twodarek/mtr-exporter/pkg/mtr"
 )
 
-type mtrJob struct {
-	Report   *mtrReport
+type JobMeta struct {
+	Report   mtr.Report
 	Launched time.Time
 	Duration time.Duration
+	Schedule string
+	Label    string
+	CmdLine  string
+}
+
+type Job struct {
+	JobMeta
 
 	mtrBinary string
 	args      []string
 	cmdLine   string
 
-	sync.Mutex
+	UpdateFn func(JobMeta) bool
 }
 
-func newMtrJob(mtr string, args []string) *mtrJob {
+func NewJob(mtr string, args []string, schedule string) *Job {
 	extra := []string{
 		"-j", // json output
 	}
 	args = append(extra, args...)
 	cmd := exec.Command(mtr, args...)
-
-	return &mtrJob{
+	job := Job{
 		args:      args,
 		mtrBinary: mtr,
 		cmdLine:   strings.Join(cmd.Args, " "),
 	}
+	job.JobMeta.Schedule = schedule
+	job.JobMeta.CmdLine = job.cmdLine
+	return &job
 }
 
-func (job *mtrJob) Launch() error {
+func (job *Job) Launch() error {
 
 	// TODO: maybe use CommandContext to have an upper limit in the execution
 
@@ -50,17 +60,19 @@ func (job *mtrJob) Launch() error {
 	duration := time.Since(launched)
 
 	// decode the report
-	report := &mtrReport{}
+	report := mtr.Report{}
 	if err := report.Decode(&buf); err != nil {
 		return err
 	}
 
 	// copy the report into the job
-	job.Lock()
-	job.Report = report
-	job.Launched = launched
-	job.Duration = duration
-	job.Unlock()
+	job.JobMeta.Report = report
+	job.JobMeta.Launched = launched
+	job.JobMeta.Duration = duration
+
+	if job.UpdateFn != nil {
+		job.UpdateFn(job.JobMeta)
+	}
 
 	// done.
 	return nil

@@ -1,12 +1,12 @@
-package main
+package mtr
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
 
 func Test_MtrReportDecoding(t *testing.T) {
-
 	body := `
 	{
 		"report": {
@@ -131,7 +131,7 @@ func Test_MtrReportDecoding(t *testing.T) {
 		}
 	}`
 
-	report := &mtrReport{}
+	report := &Report{}
 	if err := report.Decode(strings.NewReader(body)); err != nil {
 		t.Fatalf("error decoding: %s\n%s", err, body)
 	}
@@ -141,5 +141,39 @@ func Test_MtrReportDecoding(t *testing.T) {
 			"dst.example.com",
 			report.Mtr.Dst,
 			report)
+	}
+}
+
+func Test_MtrJSONDecoding(t *testing.T) {
+
+	fixtures := []string{
+		// <= mtr:0.93 format
+		`{
+			"src": "src.example.com",
+			"dst": "dst.example.com",
+			"tos": "0x0",
+			"tests": 2,
+			"psize": "64",
+			"bitpattern": "0x00"
+		}`,
+		// >= mtr:0.94 format
+		`{
+			"src": "src.example.com",
+			"dst": "dst.example.com",
+			"tos": 64,
+			"tests": 2,
+			"psize": "64",
+			"bitpattern": "0x00"
+		}`,
+	}
+
+	for _, f := range fixtures {
+		r := strings.NewReader(f)
+		d := json.NewDecoder(r)
+		m := Mtr{}
+		err := d.Decode(&m)
+		if err != nil {
+			t.Fatalf("%s\n%s", f, err)
+		}
 	}
 }

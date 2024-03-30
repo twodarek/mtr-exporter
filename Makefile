@@ -1,61 +1,134 @@
+PROJECT=mtr-exporter
 VERSION=$(shell cat VERSION)
 BUILD_DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 GIT_HASH=$(shell git rev-parse HEAD)
+CONTAINER_PLATFORM?=linux/amd64
 
-BINARIES=bin/mtr-exporter-$(VERSION).linux.amd64 \
-		 bin/mtr-exporter-$(VERSION).linux.386 \
-		 bin/mtr-exporter-$(VERSION).linux.arm64 \
-		 bin/mtr-exporter-$(VERSION).linux.mips64 \
-		 bin/mtr-exporter-$(VERSION).windows.amd64.exe \
-		 bin/mtr-exporter-$(VERSION).freebsd.amd64 \
-		 bin/mtr-exporter-$(VERSION).darwin.amd64
+TARGETS=linux.amd64 	\
+	linux.386 			\
+	linux.arm64 		\
+	linux.mips64 		\
+	windows.amd64.exe 	\
+	freebsd.amd64 		\
+	darwin.amd64 		\
+	darwin.arm64
+
+BINARIES=$(addprefix bin/$(PROJECT)-$(VERSION)., $(TARGETS))
+RELEASES=$(subst windows.amd64.tar.gz,windows.amd64.zip,$(foreach r,$(subst .exe,,$(TARGETS)),releases/$(PROJECT)-$(VERSION).$(r).tar.gz))
 
 LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildDate=$(BUILD_DATE) -X main.GitHash=$(GIT_HASH)"
 
-mtr-exporter: cmd/mtr-exporter
-	cd cmd/mtr-exporter && go build -v -o ../../$@
+$(PROJECT): 
+	go build -v -o $@ ./cmd/$(PROJECT)
 
-compile-analysis:
-	cd cmd/mtr-exporter && go build -gcflags '-m'
+######################################################
+## release related
 
-code-quality:
-	-go vet ./cmd/mtr-exporter
-	-gofmt -s -d ./cmd/mtr-exporter
-	-golint ./cmd/mtr-exporter
-	-gocyclo ./cmd/mtr-exporter
-	-ineffassign ./cmd/mtr-exporter
+binaries: $(BINARIES)
+release: $(RELEASES)
+releases: $(RELEASES)
+list-releases:
+	@echo $(RELEASES)|tr ' ' '\n'
+clean:
+	rm -f $(BINARIES) $(RELEASES)
 
-test:
-	cd cmd/mtr-exporter && go test -v
+$(PROJECT): bin/$(PROJECT)
+bin/$(PROJECT): cmd/$(PROJECT) bin
+	go build -v -o $@ ./$<
 
-release: $(BINARIES)
+bin/$(PROJECT)-$(VERSION).%:
+	env GOARCH=$(subst .,,$(suffix $(subst .exe,,$@))) GOOS=$(subst .,,$(suffix $(basename $(subst .exe,,$@)))) CGO_ENABLED=0 \
+	go build $(LDFLAGS) -o $@ ./cmd/$(PROJECT)
 
-container-image:
-	docker build \
-		--file Dockerfile \
-		--build-arg MTR_BIN=bin/mtr-exporter-$(VERSION).linux.amd64 \
-		--tag mtr-exporter:$(VERSION) .
-
-bin/mtr-exporter-$(VERSION).linux.mips64: bin
-	cd cmd/mtr-exporter && env GOOS=linux GOARCH=mips64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../../$@
-
-bin/mtr-exporter-$(VERSION).linux.amd64: bin
-	cd cmd/mtr-exporter && env GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../../$@
-
-bin/mtr-exporter-$(VERSION).linux.386: bin
-	cd cmd/mtr-exporter && env GOOS=linux GOARCH=386 CGO_ENABLED=0 go build $(LDFLAGS) -o ../../$@
-
-bin/mtr-exporter-$(VERSION).linux.arm64: bin
-	cd cmd/mtr-exporter && env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../../$@
-
-bin/mtr-exporter-$(VERSION).windows.amd64.exe: bin
-	cd cmd/mtr-exporter && env GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../../$@
-
-bin/mtr-exporter-$(VERSION).darwin.amd64: bin
-	cd cmd/mtr-exporter && env GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../../$@
-
-bin/mtr-exporter-$(VERSION).freebsd.amd64: bin
-	cd cmd/mtr-exporter && env GOOS=freebsd GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../../$@
+releases/mtr-exporter-$(VERSION).%.zip: bin/$(PROJECT)-$(VERSION).%.exe
+	mkdir -p releases
+	zip -9 -j -r $@ README.md LICENSE $<
+releases/$(PROJECT)-$(VERSION).%.tar.gz: bin/$(PROJECT)-$(VERSION).%
+	mkdir -p releases
+	tar -cf $(basename $@) README.md LICENSE && \
+		tar -rf $(basename $@) --strip-components 1 $< && \
+		gzip -9 $(basename $@)
 
 bin:
 	mkdir $@
+
+
+container-image:
+	env DOCKER_BUILDKIT=1 docker build \
+		--file Dockerfile \
+		--platform=$(CONTAINER_PLATFORM) \
+		--build-arg VERSION=$(VERSION) \
+		--tag $(CONTAINER_PLATFORM)-$(PROJECT):$(VERSION) .
+
+######################################################
+## dev related
+
+deps-vendor:
+	go mod vendor
+deps-cleanup:
+	go mod tidy
+deps-ls:
+	go list -m -mod=readonly -f '{{if not .Indirect}}{{.}}{{end}}' all
+deps-ls-updates:
+	go list -m -mod=readonly -f '{{if not .Indirect}}{{.}}{{end}}' -u all
+
+
+
+compile-analysis: cmd/$(PROJECT)
+	go build -gcflags '-m' ./$^
+
+reports: report-vuln report-gosec
+reports: report-staticcheck report-vet report-ineffassign
+reports: report-cyclo
+reports: report-errcheck report-gocritic
+reports: report-misspell
+
+report-cyclo:
+	@echo '####################################################################'
+	gocyclo ./cmd/...
+report-misspell:
+	@echo '####################################################################'
+	misspell .
+report-ineffassign:
+	@echo '####################################################################'
+	ineffassign ./cmd/... ./pkg/...
+report-vet:
+	@echo '####################################################################'
+	go vet ./cmd/... ./pkg/...
+report-staticcheck:
+	@echo '####################################################################'
+	staticcheck ./cmd/... ./pkg/...
+report-vuln:
+	@echo '####################################################################'
+	govulncheck ./cmd/... ./pkg/...
+report-gosec:
+	@echo '####################################################################'
+	gosec ./cmd/... ./pkg/...
+report-grype:
+	@echo '####################################################################'
+	grype .
+report-errcheck:
+	@echo '####################################################################'
+	errcheck -ignorepkg fmt ./...
+report-gocritic:
+	@echo '####################################################################'
+	gocritic check ./cmd/... ./pkg/...
+
+fetch-report-tools:
+	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+	go install github.com/client9/misspell/cmd/misspell@latest
+	go install github.com/gordonklaus/ineffassign@latest
+	go install honnef.co/go/tools/cmd/staticcheck@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install github.com/securego/gosec/v2/cmd/gosec@latest
+	go install -v github.com/go-critic/go-critic/cmd/gocritic@latest
+	go install github.com/kisielk/errcheck@latest
+
+fetch-report-tool-grype:
+	go install github.com/anchore/grype@latest
+
+
+test:
+	go test -v ./cmd/$(PROJECT)
+
+.PHONY: $(PROJECT) bin/$(PROJECT) binaries releases

@@ -25,15 +25,20 @@ Usually, [mtr] is producing the following output:
     # cmdline: /usr/local/sbin/mtr -j -c 2 -n example.com
     mtr_report_duration_ms_gauge{bitpattern="0x00",dst="example.com",psize="64",src="src.example.com",tests="2",tos="0x0"} 7179 1583685425000
     mtr_report_count_hubs_gauge{bitpattern="0x00",dst="example.com",psize="64",src="src.example.com",tests="2",tos="0x0"} 10 1583685425000
-    mtr_report_loss_gauge{bitpattern="0x00",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.000000 1583685425000
-    mtr_report_snt_gauge{bitpattern="0x00",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 2 1583685425000
-    mtr_report_last_gauge{bitpattern="0x00",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.380000 1583685425000
-    mtr_report_avg_gauge{bitpattern="0x00",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.480000 1583685425000
-    mtr_report_best_gauge{bitpattern="0x00",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.380000 1583685425000
-    mtr_report_wrst_gauge{bitpattern="0x00",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.570000 1583685425000
-    mtr_report_stdev_gauge{bitpattern="0x00",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.130000 1583685425000
+    mtr_report_loss_gauge{bitpattern="0x00",hop="first",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.000000 1583685425000
+    mtr_report_snt_gauge{bitpattern="0x00",hop="first",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 2 1583685425000
+    mtr_report_last_gauge{bitpattern="0x00",hop="first",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.380000 1583685425000
+    mtr_report_avg_gauge{bitpattern="0x00",hop="first",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.480000 1583685425000
+    mtr_report_best_gauge{bitpattern="0x00",hop="first",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.380000 1583685425000
+    mtr_report_wrst_gauge{bitpattern="0x00",hop="first",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.570000 1583685425000
+    mtr_report_stdev_gauge{bitpattern="0x00",hop="first",count="1",dst="example.com",host="127.0.0.1",psize="64",src="src.example.com",tests="2",tos="0x0"} 0.130000 1583685425000
 
-The last hop in the list of tested hosts contains the label `"last"="true"`.
+Each hop gets a label `"hop"="first"`, `"hop"="last"`, `"hop"="first_last"` or
+`"hop"="intermediate"`, depending where on the path to the destination the hop
+is. 
+
+Legacy: the last hop in the list of tested hosts contains the label `"last"="true"`.
+Use `hop=~".*last"` in your Prometheus queries to achieve the same.
 
 When [prometheus] scrapes the data, you can visualise the observed values:
 
@@ -43,34 +48,43 @@ When [prometheus] scrapes the data, you can visualise the observed values:
 
 ## Usage
 
-    $> mtr-exporter [OPTS] -- [MTR-OPTS]
-
-    mtr-exporter [FLAGS] -- [MTR-FLAGS]
+    $> mtr-exporter [FLAGS] -- [MTR-FLAGS]
 
     FLAGS:
-    -bind <bind-address>
-              bind address (default ":8080")
-    -h        show help
-    -mtr <path-to-binary>
-              path to mtr binary (default "mtr")
-    -schedule <schedule>
-              schedule at which often mtr is launched (default "@every 60s")
-              examples:
-                @every <dur>  - example "@every 60s"
-                @hourly       - run once per hour
-                10 * * * *    - execute 10 minutes after the full hour
-              see https://en.wikipedia.org/wiki/Cron
+    -bind       <bind-address>
+                bind address (default ":8080")
+    -flag.deprecatedMetrics
+                render deprecated metrics (default: false)
+                helps with transition time until deprecated metrics are gone
+    -h
+                show help
+    -jobs       <path-to-jobsfile>
+                file describing multiple mtr-jobs. syntax is given below.
+    -label      <job-label>
+                use <job-label> in prometheus-metrics (default: "mtr-exporter-cli")
+    -mtr        <path-to-binary>
+                path to mtr binary (default: "mtr")
+    -schedule   <schedule>
+                schedule at which often mtr is launched (default: "@every 60s")
+                examples:
+                   @every <dur>  - example "@every 60s"
+                   @hourly       - run once per hour
+                   10 * * * *    - execute 10 minutes after the full hour
+                see https://en.wikipedia.org/wiki/Cron
     -tslogs
-              use timestamps in logs
+                use timestamps in logs
+    -watch-jobs <schedule>
+                periodically watch the file defined via -jobs (default: "")
+                if it has changed stop previously running mtr-jobs and apply
+                all jobs defined in -jobs.
     -version
-              show version
-
+                show version
     MTR-FLAGS:
             see "man mtr" for valid flags to mtr.
 
 At `/metrics` the measured values of the last run are exposed.
 
-Examples:
+### Examples
 
     $> mtr-exporter -- example.com
     # probe every minute "example.com"
@@ -82,6 +96,18 @@ Examples:
     # probe every 30s "example.com", wait 1s for response, try a max of 3 hops,
     # use interface "ven3", do not resolve DNS.
 
+### Jobs-File Syntax
+
+    # comment lines start with '#' are ignored
+    # empty lines are ignored as well
+    label -- <schedule> -- mtr-flags
+
+Example:
+
+    quad9       -- @every 120s -- -I ven1 -n 9.9.9.9
+    example.com -- @every 45s  -- -I ven2 -n example.com
+
+
 ## Requirements
 
 Runtime:
@@ -90,17 +116,17 @@ Runtime:
 
 Build:
 
-* golang-1.13 and newer
+* golang-1.21 and newer
 
 ## Building
 
-    $> git clone github.com/mgumz/mtr-exporter
+    $> git clone https://github.com/mgumz/mtr-exporter
     $> cd mtr-exporter
     $> make
 
 One-off building and "installation":
 
-    $> go get github.com/mgumz/mtr-exporter/cmd/mtr-exporter
+    $> go install github.com/mgumz/mtr-exporter/cmd/mtr-exporter@latest
 
 ## License
 

@@ -2,24 +2,30 @@
 ## -- runtime environment
 ##
 
-FROM    golang:1.21-alpine AS build-env
+FROM    golang:1.21.0-alpine3.18 AS build-env
 
-ARG     MTR_BIN=mtr-exporter-0.1.0.linux.amd64
+#       https://github.com/docker-library/official-images#multiple-architectures
+#       https://docs.docker.com/engine/reference/builder/#automatic-platform-args-in-the-global-scope
+ARG     TARGETPLATFORM
+ARG     TARGETOS
+ARG     TARGETARCH
+
+ARG     VERSION=latest
 
 ADD     . /src/mtr-exporter
 WORKDIR /src/mtr-exporter
 RUN     apk add -U --no-cache make git
-RUN     go build -o $MTR_BIN ./cmd/mtr-exporter
+RUN     make -C /src/mtr-exporter bin/mtr-exporter
+
 
 ##
 ## -- runtime environment
 ##
 
-FROM    alpine:latest AS rt-env
+FROM    alpine:3.18 AS rt-env
 
-ARG     MTR_BIN=mtr-exporter-0.1.0.linux.amd64
 RUN     apk add -U --no-cache mtr
-COPY    --from=build-env /src/mtr-exporter/$MTR_BIN /usr/local/bin/mtr-exporter
+COPY    --from=build-env /src/mtr-exporter/bin/mtr-exporter /usr/bin/mtr-exporter
 
 EXPOSE  8080
-ENTRYPOINT ["/usr/local/bin/mtr-exporter", "8.8.8.8"]
+ENTRYPOINT ["/usr/bin/mtr-exporter", "8.8.8.8"]
